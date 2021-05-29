@@ -3,16 +3,19 @@
 
 import numpy as np
 import tensorflow as tf
-import core.utils as utils
-import core.common as common
-import core.backbone as backbone
-from core.config import cfg
+
+import tf_yolo.core.utils as utils
+import tf_yolo.core.common as common
+import tf_yolo.core.backbone as backbone
+from tf_yolo.core.config import cfg
+
 
 # NUM_CLASS       = len(utils.read_class_names(cfg.YOLO.CLASSES))
 # STRIDES         = np.array(cfg.YOLO.STRIDES)
 # IOU_LOSS_THRESH = cfg.YOLO.IOU_LOSS_THRESH
 # XYSCALE = cfg.YOLO.XYSCALE
 # ANCHORS = utils.get_anchors(cfg.YOLO.ANCHORS)
+
 
 def YOLO(input_layer, NUM_CLASS, model='yolov4', is_tiny=False):
     if is_tiny:

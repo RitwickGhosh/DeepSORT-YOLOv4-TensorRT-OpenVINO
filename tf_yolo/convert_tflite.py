@@ -1,18 +1,21 @@
+import os
+import cv2
+import numpy as np
 import tensorflow as tf
 from absl import app, flags, logging
 from absl.flags import FLAGS
-import numpy as np
-import cv2
-from core.yolov4 import YOLOv4, YOLOv3, YOLOv3_tiny, decode
+
 import core.utils as utils
-import os
 from core.config import cfg
+from core.yolov4 import YOLOv4, YOLOv3, YOLOv3_tiny, decode
+
 
 flags.DEFINE_string('weights', './checkpoints/yolov4-416', 'path to weights file')
 flags.DEFINE_string('output', './checkpoints/yolov4-416-fp32.tflite', 'path to output')
 flags.DEFINE_integer('input_size', 416, 'path to output')
 flags.DEFINE_string('quantize_mode', 'float32', 'quantize mode (int8, float16, float32)')
 flags.DEFINE_string('dataset', "/Volumes/Elements/data/coco_dataset/coco/5k.txt", 'path to dataset')
+
 
 def representative_data_gen():
   fimage = open(FLAGS.dataset).read().split()
@@ -76,5 +79,3 @@ if __name__ == '__main__':
         app.run(main)
     except SystemExit:
         pass
-
-

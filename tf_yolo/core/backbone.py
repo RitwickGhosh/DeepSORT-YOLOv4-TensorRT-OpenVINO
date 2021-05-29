@@ -2,7 +2,8 @@
 # coding=utf-8
 
 import tensorflow as tf
-import core.common as common
+import tf_yolo.core.common as common
+
 
 def darknet53(input_data):
 

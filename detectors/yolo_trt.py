@@ -11,6 +11,7 @@ import ctypes
 import numpy as np
 import cv2
 import tensorrt as trt
+import pycuda.autoinit
 import pycuda.driver as cuda
 
 
@@ -267,14 +268,14 @@ class TrtYOLO(object):
     """TrtYOLO class encapsulates things needed to run TRT YOLO."""
 
     def _load_engine(self):
-        # TRTbin = 'yolo/%s.trt' % self.model
-        with open(self.model, 'rb') as f, trt.Runtime(self.trt_logger) as runtime:
+        with open(self.model_path, 'rb') as f, trt.Runtime(self.trt_logger) as runtime:
             return runtime.deserialize_cuda_engine(f.read())
 
-    def __init__(self, model, category_num=80, letter_box=False, cuda_ctx=None):
+    def __init__(self, model_path, iou_threshold, score_threshold, letter_box=False, cuda_ctx=None):
         """Initialize TensorRT plugins, engine and conetxt."""
-        self.model = model
-        self.category_num = category_num
+        self.model_path = model_path
+        self.iou_threshold = iou_threshold
+        self.score_threshold = score_threshold
         self.letter_box = letter_box
         self.cuda_ctx = cuda_ctx
         if self.cuda_ctx:
@@ -303,7 +304,7 @@ class TrtYOLO(object):
         del self.inputs
         del self.stream
 
-    def detect(self, img, conf_th=0.3, letter_box=None):
+    def detect(self, img, letter_box=None):
         """Detect objects in the input image."""
         letter_box = self.letter_box if letter_box is None else letter_box
         img_resized = _preprocess_yolo(img, self.input_shape, letter_box)
@@ -323,11 +324,18 @@ class TrtYOLO(object):
             self.cuda_ctx.pop()
 
         boxes, scores, classes = _postprocess_yolo(
-            trt_outputs, img.shape[1], img.shape[0], conf_th,
-            nms_threshold=0.5, input_shape=self.input_shape,
+            trt_outputs, img.shape[1], img.shape[0], self.score_threshold,
+            nms_threshold=self.iou_threshold, input_shape=self.input_shape,
             letter_box=letter_box)
 
         # clip x1, y1, x2, y2 within original image
         boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]], 0, img.shape[1]-1)
         boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]], 0, img.shape[0]-1)
-        return boxes, scores, classes
+
+        # format bounding boxes from ymin, xmin, ymax, xmax ---> xmin, ymin, width, height
+        xy_min = np.hstack([np.zeros((boxes.shape[0], 2)), boxes[:,:2]])
+        bboxes = np.subtract(boxes, xy_min)
+
+        num_objects = np.array(len(classes))
+
+        return bboxes, scores, classes, num_objects, 0
