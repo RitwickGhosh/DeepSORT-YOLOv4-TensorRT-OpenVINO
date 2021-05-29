@@ -1,32 +1,43 @@
 import os
+import cv2
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+from absl import app, flags, logging
+from absl.flags import FLAGS
 # comment out below line to enable tensorflow logging outputs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import time
 import tensorflow as tf
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
-from absl import app, flags, logging
-from absl.flags import FLAGS
-import core.utils as utils
-from core.yolov4 import filter_boxes
 from tensorflow.python.saved_model import tag_constants
-from core.config import cfg
-from PIL import Image
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
+# tensorflow yolo core imports
+import core.utils as utils
+from core.yolov4 import filter_boxes
+from core.config import cfg
 # deep sort imports
 from deep_sort import preprocessing, nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
+# yolo tensorrt imports
+import pycuda.autoinit
+from trt_yolo.utils.yolo_classes import get_cls_dict
+from trt_yolo.utils.camera import add_camera_args, Camera
+from trt_yolo.utils.display import open_window, set_display, show_fps
+from trt_yolo.utils.visualization import BBoxVisualization
+from trt_yolo.utils.yolo_with_plugins import TrtYOLO
+
+
 flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
 flags.DEFINE_string('weights', './checkpoints/yolov4-416',
                     'path to weights file')
 flags.DEFINE_integer('size', 416, 'resize images to')
+flags.DEFINE_integer('classes_num', 80, 'number of classes')
 flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
 flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
 flags.DEFINE_string('video', './data/video/test.mp4', 'path to input video or set to 0 for webcam')
@@ -60,18 +71,21 @@ def main(_argv):
     input_size = FLAGS.size
     video_path = FLAGS.video
 
+    # load tf saved model
+    if FLAGS.framework == 'tf':
+        saved_model_loaded = tf.saved_model.load(FLAGS.weights, tags=[tag_constants.SERVING])
+        infer = saved_model_loaded.signatures['serving_default']
     # load tflite model if flag is set
-    if FLAGS.framework == 'tflite':
+    elif FLAGS.framework == 'tflite':
         interpreter = tf.lite.Interpreter(model_path=FLAGS.weights)
         interpreter.allocate_tensors()
         input_details = interpreter.get_input_details()
         output_details = interpreter.get_output_details()
         print(input_details)
         print(output_details)
-    # otherwise load standard tensorflow saved model
-    else:
-        saved_model_loaded = tf.saved_model.load(FLAGS.weights, tags=[tag_constants.SERVING])
-        infer = saved_model_loaded.signatures['serving_default']
+    # load tensorrt engine if flag is set
+    elif FLAGS.framework == 'trt':
+        trt_yolo = TrtYOLO(FLAGS.weights, FLAGS.classes_num, False)
 
     # begin video capture
     try:
@@ -91,6 +105,7 @@ def main(_argv):
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
     frame_num = 0
+    all_time = 0
     # while video is running
     while True:
         return_value, frame = vid.read()
@@ -108,8 +123,14 @@ def main(_argv):
         image_data = image_data[np.newaxis, ...].astype(np.float32)
         start_time = time.time()
 
+        if FLAGS.framework == 'tf':
+            batch_data = tf.constant(image_data)
+            pred_bbox = infer(batch_data)
+            for key, value in pred_bbox.items():
+                boxes = value[:, :, 0:4]
+                pred_conf = value[:, :, 4:]
         # run detections on tflite if flag is set
-        if FLAGS.framework == 'tflite':
+        elif FLAGS.framework == 'tflite':
             interpreter.set_tensor(input_details[0]['index'], image_data)
             interpreter.invoke()
             pred = [interpreter.get_tensor(output_details[i]['index']) for i in range(len(output_details))]
@@ -120,38 +141,46 @@ def main(_argv):
             else:
                 boxes, pred_conf = filter_boxes(pred[0], pred[1], score_threshold=0.25,
                                                 input_shape=tf.constant([input_size, input_size]))
-        else:
-            batch_data = tf.constant(image_data)
-            pred_bbox = infer(batch_data)
-            for key, value in pred_bbox.items():
-                boxes = value[:, :, 0:4]
-                pred_conf = value[:, :, 4:]
+        # run detections on tensorrt if flag is set
+        elif FLAGS.framework == 'trt':
+            boxes, scores, classes = trt_yolo.detect(frame, FLAGS.score)
 
-        boxes, scores, classes, valid_detections = tf.image.combined_non_max_suppression(
-            boxes=tf.reshape(boxes, (tf.shape(boxes)[0], -1, 1, 4)),
-            scores=tf.reshape(
-                pred_conf, (tf.shape(pred_conf)[0], -1, tf.shape(pred_conf)[-1])),
-            max_output_size_per_class=50,
-            max_total_size=50,
-            iou_threshold=FLAGS.iou,
-            score_threshold=FLAGS.score
-        )
+            # format bounding boxes from ymin, xmin, ymax, xmax ---> xmin, ymin, width, height
+            xy_min = np.hstack([np.zeros((boxes.shape[0], 2)), boxes[:,:2]])
+            bboxes = np.subtract(boxes, xy_min)
 
-        # convert data to numpy arrays and slice out unused elements
-        num_objects = valid_detections.numpy()[0]
-        bboxes = boxes.numpy()[0]
-        bboxes = bboxes[0:int(num_objects)]
-        scores = scores.numpy()[0]
-        scores = scores[0:int(num_objects)]
-        classes = classes.numpy()[0]
-        classes = classes[0:int(num_objects)]
+            num_objects = np.array(len(classes))
 
-        # format bounding boxes from normalized ymin, xmin, ymax, xmax ---> xmin, ymin, width, height
-        original_h, original_w, _ = frame.shape
-        bboxes = utils.format_boxes(bboxes, original_h, original_w)
+        if FLAGS.framework == 'tf' or FLAGS.framework == 'tflite':
+            boxes, scores, classes, valid_detections = tf.image.combined_non_max_suppression(
+                boxes=tf.reshape(boxes, (tf.shape(boxes)[0], -1, 1, 4)),
+                scores=tf.reshape(
+                    pred_conf, (tf.shape(pred_conf)[0], -1, tf.shape(pred_conf)[-1])),
+                max_output_size_per_class=50,
+                max_total_size=50,
+                iou_threshold=FLAGS.iou,
+                score_threshold=FLAGS.score
+            )
+
+            # convert data to numpy arrays and slice out unused elements
+            num_objects = valid_detections.numpy()[0]
+            bboxes = boxes.numpy()[0]
+            bboxes = bboxes[0:int(num_objects)]
+            scores = scores.numpy()[0]
+            scores = scores[0:int(num_objects)]
+            classes = classes.numpy()[0]
+            classes = classes[0:int(num_objects)]
+
+            # format bounding boxes from normalized ymin, xmin, ymax, xmax ---> xmin, ymin, width, height
+            original_h, original_w, _ = frame.shape
+            bboxes = utils.format_boxes(bboxes, original_h, original_w)
 
         # store all predictions in one parameter for simplicity when calling functions
         pred_bbox = [bboxes, scores, classes, num_objects]
+        # print(pred_bbox[0].shape)
+        # print(pred_bbox[1].shape)
+        # print(pred_bbox[2].shape)
+        # print(pred_bbox[3].shape)
 
         # read in all class names from config
         class_names = utils.read_class_names(cfg.YOLO.CLASSES)
@@ -219,7 +248,9 @@ def main(_argv):
                 print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
 
         # calculate frames per second of running detections
-        fps = 1.0 / (time.time() - start_time)
+        inference_time = time.time() - start_time
+        all_time += inference_time
+        fps = 1.0 / inference_time
         print("FPS: %.2f" % fps)
         result = np.asarray(frame)
         result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
@@ -232,6 +263,13 @@ def main(_argv):
             out.write(result)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
     cv2.destroyAllWindows()
+    
+    print("Inference total time: %.4f" % all_time)
+    print("Frames: %.2f" % frame_num)
+    mean_time = all_time / frame_num
+    mean_fps = frame_num / all_time
+    print("Mean inference time: %.4f" % mean_time)
+    print("Mean FPS: %.4f" % mean_fps)
 
 if __name__ == '__main__':
     try:
