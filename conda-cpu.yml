@@ -13,3 +13,5 @@ dependencies:
     - absl-py
     - easydict
     - pillow
+    - numpy>=1.15.1
+    - onnx==1.4.1
