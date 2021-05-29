@@ -8,12 +8,6 @@ from absl.flags import FLAGS
 
 # comment out below line to enable tensorflow logging outputs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import tensorflow as tf
-physical_devices = tf.config.experimental.list_physical_devices('GPU')
-if len(physical_devices) > 0:
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-from tensorflow.compat.v1 import ConfigProto
-from tensorflow.compat.v1 import InteractiveSession
 
 # tensorflow yolo core imports
 from tf_yolo.core.utils import read_class_names
@@ -49,18 +43,12 @@ def main(_argv):
     nms_max_overlap = 1.0
     
     # initialize deep sort
-    model_filename = 'model_data/mars-small128.pb'
+    model_filename = 'data/deep_sort_model/mars-small128.pb'
     encoder = gdet.create_box_encoder(model_filename, batch_size=1)
     # calculate cosine distance metric
     metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
     # initialize tracker
     tracker = Tracker(metric)
-
-    # load configuration for object detector
-    config = ConfigProto()
-    config.gpu_options.allow_growth = True
-    session = InteractiveSession(config=config)
-    video_path = FLAGS.video
 
     # read in all class names from config
     class_names = read_class_names(FLAGS.names)
@@ -94,12 +82,11 @@ def main(_argv):
         detector = TrtYOLO(**detector_config)
 
     # begin video capture
+    video_path = FLAGS.video
     try:
         vid = cv2.VideoCapture(int(video_path))
     except:
         vid = cv2.VideoCapture(video_path)
-
-    out = None
 
     # get video ready to save locally if flag is set
     if FLAGS.output:
@@ -134,24 +121,24 @@ def main(_argv):
         bboxes, scores, classes, num_objects, detection_time = detector.detect(frame)
 
         # loop through objects and use class index to get class name, allow only classes in allowed_classes list
-        # names = []
-        # deleted_indx = []
-        # for i in range(num_objects):
-        #     class_indx = int(classes[i])
-        #     class_name = class_names[class_indx]
-        #     if class_name not in allowed_classes:
-        #         deleted_indx.append(i)
-        #     else:
-        #         names.append(class_name)
-        # names = np.array(names)
-        # count = len(names)
+        names = []
+        deleted_indx = []
+        for class_indx in classes.astype(int):
+            class_name = class_names[class_indx]
+            if class_name not in allowed_classes:
+                deleted_indx.append(i)
+            else:
+                names.append(class_name)
+
+        # delete detections that are not in allowed_classes
+        bboxes = np.delete(bboxes, deleted_indx, axis=0)
+        scores = np.delete(scores, deleted_indx, axis=0)
+        names = np.array(names)
 
         # if FLAGS.count:
+        #     count = len(names)
         #     cv2.putText(frame, "Objects being tracked: {}".format(count), (5, 35), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0, 255, 0), 2)
         #     print("Objects being tracked: {}".format(count))
-        # delete detections that are not in allowed_classes
-        # bboxes = np.delete(bboxes, deleted_indx, axis=0)
-        # scores = np.delete(scores, deleted_indx, axis=0)
 
         # encode yolo detections and feed to tracker
         features = encoder(frame, bboxes)
@@ -209,7 +196,7 @@ def main(_argv):
     cv2.destroyAllWindows()
     
     print("Inference total time: %.4f" % all_time)
-    print("Frames: %.2f" % frame_num)
+    print("Frames: ", frame_num)
     mean_time = all_time / frame_num
     mean_fps = frame_num / all_time
     print("Mean inference time: %.4f" % mean_time)

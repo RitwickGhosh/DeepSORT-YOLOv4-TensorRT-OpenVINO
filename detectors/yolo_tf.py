@@ -3,6 +3,9 @@ import time
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.saved_model import tag_constants
+physical_devices = tf.config.experimental.list_physical_devices('GPU')
+if len(physical_devices) > 0:
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 from tf_yolo.core.utils import format_boxes
 
