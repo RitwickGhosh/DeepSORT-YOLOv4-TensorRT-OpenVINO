@@ -52,7 +52,6 @@
 from __future__ import print_function
 
 import os
-import cv2
 import argparse
 
 import tensorrt as trt
@@ -88,7 +87,7 @@ def set_net_batch(network, batch_size):
     return network
 
 
-def build_engine(model_name, do_int8, dla_core, verbose=False):
+def build_engine(model_name, img_dir, quant_mode, dla_core, verbose=False):
     """Build a TensorRT engine from ONNX using the older API."""
     cfg_file_path = model_name + '.cfg'
     parser = DarkNetParser()
@@ -104,7 +103,7 @@ def build_engine(model_name, do_int8, dla_core, verbose=False):
     EXPLICIT_BATCH = [] if trt.__version__[0] < '7' else \
         [1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)]
     with trt.Builder(TRT_LOGGER) as builder, builder.create_network(*EXPLICIT_BATCH) as network, trt.OnnxParser(network, TRT_LOGGER) as parser:
-        if do_int8 and not builder.platform_has_fast_int8:
+        if quant_mode == 'int8' and not builder.platform_has_fast_int8:
             raise RuntimeError('INT8 not supported on this platform')
         if not parser.parse(onnx_data):
             print('ERROR: Failed to parse the ONNX file.')
@@ -123,20 +122,22 @@ def build_engine(model_name, do_int8, dla_core, verbose=False):
                 raise RuntimeError('DLA core not supported by old API')
             builder.max_batch_size = MAX_BATCH_SIZE
             builder.max_workspace_size = 1 << 30
-            builder.fp16_mode = True  # alternative: builder.platform_has_fast_fp16
-            #builder.fp16_mode = False
-            if do_int8:
+            if quant_mode == 'fp32':
+                builder.fp16_mode = True
+            elif quant_mode == 'fp16':
+                builder.fp16_mode = True # alternative: builder.platform_has_fast_fp16
+            elif quant_mode == 'int8':
+                builder.fp16_mode = True
                 from calibrator import YOLOEntropyCalibrator
                 builder.int8_mode = True
                 builder.int8_calibrator = YOLOEntropyCalibrator(
-                    'calib_images', (net_h, net_w), 'calib_%s.bin' % model_name)
+                    img_dir, (net_h, net_w), 'calib_%s.bin' % model_name)
             engine = builder.build_cuda_engine(network)
         else:  # new API: build_engine() with builder config
             builder.max_batch_size = MAX_BATCH_SIZE
             config = builder.create_builder_config()
             config.max_workspace_size = 1 << 30
             config.set_flag(trt.BuilderFlag.GPU_FALLBACK)
-            config.set_flag(trt.BuilderFlag.FP16)
             profile = builder.create_optimization_profile()
             profile.set_shape(
                 '000_net',                          # input tensor name
@@ -144,11 +145,16 @@ def build_engine(model_name, do_int8, dla_core, verbose=False):
                 (MAX_BATCH_SIZE, 3, net_h, net_w),  # opt shape
                 (MAX_BATCH_SIZE, 3, net_h, net_w))  # max shape
             config.add_optimization_profile(profile)
-            if do_int8:
+            if quant_mode == 'fp32':
+                config.set_flag(trt.BuilderFlag.FP32)
+            elif quant_mode == 'fp16':
+                config.set_flag(trt.BuilderFlag.FP16)
+            elif quant_mode == 'int8':
+                config.set_flag(trt.BuilderFlag.FP16)
                 from calibrator import YOLOEntropyCalibrator
                 config.set_flag(trt.BuilderFlag.INT8)
                 config.int8_calibrator = YOLOEntropyCalibrator(
-                    'calib_images', (net_h, net_w),
+                    img_dir, (net_h, net_w),
                     'calib_%s.bin' % model_name)
                 config.set_calibration_profile(profile)
             if dla_core >= 0:
@@ -179,22 +185,27 @@ def main():
               '{dimension} could be either a single number (e.g. '
               '288, 416, 608) or 2 numbers, WxH (e.g. 416x256)'))
     parser.add_argument(
-        '--int8', action='store_true',
-        help='build INT8 TensorRT engine')
+        '-i', '--img_dir', type=str,
+        help='path to images directory')
+    parser.add_argument(
+        '-q', '--quant_mode', type=str, default='fp32',
+        help='quantization mode, available: {fp32, fp16, int8}')
     parser.add_argument(
         '--dla_core', type=int, default=-1,
         help='id of DLA core for inference (0 ~ N-1)')
+    parser.add_argument(
+        '-o', '--output', type=str, default='./yolo.trt',
+        help='TensorRT output model path')
     args = parser.parse_args()
 
     engine = build_engine(
-        args.model, args.int8, args.dla_core, args.verbose)
+        args.model, args.img_dir, args.quant_mode, args.dla_core, args.verbose)
     if engine is None:
         raise SystemExit('ERROR: failed to build the TensorRT engine!')
 
-    engine_path = '%s.trt' % args.model
-    with open(engine_path, 'wb') as f:
+    with open(args.output, 'wb') as f:
         f.write(engine.serialize())
-    print('Serialized the TensorRT engine to file: %s' % engine_path)
+    print('Serialized the TensorRT engine to file: %s' % args.output)
 
 
 if __name__ == '__main__':

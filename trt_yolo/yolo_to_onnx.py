@@ -74,6 +74,9 @@ def parse_args():
               'yolov4-csp|yolov4x-mish]-[{dimension}], where '
               '{dimension} could be either a single number (e.g. '
               '288, 416, 608) or 2 numbers, WxH (e.g. 416x256)'))
+    parser.add_argument(
+        '-o', '--output', type=str, default='./yolo.onnx',
+        help='ONNX model output path')
     args = parser.parse_args()
     return args
 
@@ -943,7 +946,6 @@ def main():
     weights_file_path = '%s.weights' % args.model
     if not os.path.isfile(weights_file_path):
         raise SystemExit('ERROR: file (%s) not found!' % weights_file_path)
-    output_file_path = '%s.onnx' % args.model
 
     print('Parsing DarkNet cfg file...')
     parser = DarkNetParser()
@@ -974,7 +976,7 @@ def main():
     onnx.checker.check_model(yolo_model_def)
 
     print('Saving ONNX file...')
-    onnx.save(yolo_model_def, output_file_path)
+    onnx.save(yolo_model_def, args.output)
 
     print('Done.')
 
