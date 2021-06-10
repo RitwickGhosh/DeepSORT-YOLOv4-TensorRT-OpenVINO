@@ -4,6 +4,7 @@ import errno
 import argparse
 import numpy as np
 import cv2
+# import tensorflow as tf
 import tensorflow.compat.v1 as tf
 
 #tf.compat.v1.disable_eager_execution()
@@ -73,7 +74,7 @@ def extract_image_patch(image, bbox, patch_shape):
     return image
 
 
-class ImageEncoder(object):
+class ImageEncoderTF(object):
 
     def __init__(self, checkpoint_filename, input_name="images",
                  output_name="features"):
@@ -100,9 +101,52 @@ class ImageEncoder(object):
         return out
 
 
+class ImageEncoderTflite(object):
+
+    def __init__(self, model_path):
+        self.interpreter = tf.lite.Interpreter(model_path=model_path)
+        self.interpreter.allocate_tensors()
+        self.input_details = self.interpreter.get_input_details()
+        self.output_details = self.interpreter.get_output_details()
+
+        assert len(self.output_details[0]['shape']) == 2
+        assert len(self.input_details[0]['shape']) == 4
+
+        self.feature_dim = self.output_details[0]['shape'].tolist()[-1]
+        self.image_shape = self.input_details[0]['shape'].tolist()[1:]
+
+    def __call__(self, data_x, batch_size=32):
+        out = np.zeros((len(data_x), self.feature_dim), np.float32)
+        data_len = len(out)
+        num_batches = int(data_len / batch_size)
+
+        # self.interpreter.set_tensor(self.input_details[0]['index'], data_x)
+        # self.interpreter.invoke()
+        # out = [self.interpreter.get_tensor(self.output_details[i]['index']) for i in range(len(self.output_details))]
+
+        s, e = 0, 0
+        for i in range(num_batches):
+            s, e = i * batch_size, (i + 1) * batch_size
+            batch_data = data_x[s:e]
+            print(batch_data)
+            self.interpreter.set_tensor(self.input_details[0]['index'], batch_data)
+            self.interpreter.invoke()
+            out[s:e] = [self.interpreter.get_tensor(self.output_details[i]['index']) for i in range(len(self.output_details))]
+        # if e < len(out):
+        #     batch_data = data_x[e:]
+        #     self.interpreter.set_tensor(self.input_details[0]['index'], batch_data)
+        #     self.interpreter.invoke()
+        #     out[e:] = [self.interpreter.get_tensor(self.output_details[i]['index']) for i in range(len(self.output_details))]
+
+        return out
+
+
 def create_box_encoder(model_filename, input_name="images",
                        output_name="features", batch_size=32):
-    image_encoder = ImageEncoder(model_filename, input_name, output_name)
+    if model_filename.endswith('.pb'):
+        image_encoder = ImageEncoderTF(model_filename, input_name, output_name)
+    elif model_filename.endswith('.tflite'):
+        image_encoder = ImageEncoderTflite(model_filename)
     image_shape = image_encoder.image_shape
 
     def encoder(image, boxes):
