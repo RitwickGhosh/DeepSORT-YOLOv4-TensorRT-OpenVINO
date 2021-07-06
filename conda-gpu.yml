@@ -3,6 +3,7 @@ name: yolov4-gpu
 dependencies:
   - python==3.7
   - pip
+  - click
   - matplotlib
   - opencv
   - cudnn

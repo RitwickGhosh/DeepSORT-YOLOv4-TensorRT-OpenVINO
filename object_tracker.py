@@ -14,11 +14,11 @@ from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
 # YOLO detectors
-from detectors import TfYOLO, TfliteYOLO, TrtYOLO
+from detectors import OpenCVYOLO, TfYOLO, TfliteYOLO, TrtYOLO
 
 
 @click.command()
-@click.option('-f', '--framework', default='tf', type=str, help='Inference framework: {tf, tflite, trt}')
+@click.option('-f', '--framework', default='tf', type=str, help='Inference framework: {tf, tflite, trt, opencv}')
 @click.option('-m', '--model_path', default='./data/tf/yolov4-416', type=str, help='Path to detection model')
 @click.option('-n', '--yolo_names', default='./data/classes/coco.names', type=str, help='Path to YOLO class names file')
 @click.option('-s', '--size', default=416, type=int, help='Model input size')
@@ -29,10 +29,11 @@ from detectors import TfYOLO, TfliteYOLO, TrtYOLO
 @click.option('--output_format', default='XVID', type=str, help='Codec used in VideoWriter when saving video to file')
 @click.option('--iou', default=0.45, type=float, help='IoU threshold')
 @click.option('--score_threshold', default=0.5, type=float, help='Confidence score threshold')
+@click.option('--opencv_cuda_target_precision', default='FP32', type=str, help='Precision of OpenCV DNN model')
 @click.option('--dont_show', default=True, type=bool, help='Do not show video output')
 @click.option('--info', default=False, type=bool, help='Show detailed info of tracked objects')
 @click.option('--count', default=False, type=bool, help='Count objects being tracked on screen')
-def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, output, output_format, iou, score_threshold, dont_show, info, count):
+def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, output, output_format, iou, score_threshold, opencv_cuda_target_precision, dont_show, info, count):
     # Definition of the parameters
     max_cosine_distance = 0.4
     nn_budget = None
@@ -77,6 +78,13 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
     # load tensorrt engine if flag is set
     elif framework == 'trt':
         detector = TrtYOLO(**detector_config)
+    # load darknet weights with opencv if flag is set
+    elif framework == 'opencv':
+        detector_config['cfg_file'] = model_path.replace('weights', 'cfg')
+        detector_config['input_size'] = size
+        detector_config['weights_precision'] = opencv_cuda_target_precision
+
+        detector = OpenCVYOLO(**detector_config)
 
     # begin video capture
     try:
@@ -92,6 +100,11 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
         fps = int(vid.get(cv2.CAP_PROP_FPS))
         codec = cv2.VideoWriter_fourcc(*output_format)
         out = cv2.VideoWriter(output, codec, fps, (width, height))
+
+    # detector warm up
+    print("{} detector warm up".format(framework))
+    for _ in range(5):
+        _, _, _, _, _ = detector.detect(np.zeros((2160,3840,3), dtype=np.uint8))
 
     frame_num = 0
     all_time = 0
