@@ -108,6 +108,8 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
 
     frame_num = 0
     all_time = 0
+    all_detection_time = 0
+    all_time_racker = 0
 
     # while video is running
     while True:
@@ -125,6 +127,7 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
 
         # get detections from detector
         bboxes, scores, classes, num_objects, detection_time = detector.detect(frame)
+        all_detection_time += detection_time
 
         # loop through objects and use class index to get class name, allow only classes in allowed_classes list
         names = []
@@ -157,8 +160,10 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
         detections = [detections[i] for i in indices]       
 
         # call the tracker
+        tracker_start = time.time()
         tracker.predict()
         tracker.update(detections)
+        all_time_racker += time.time() - tracker_start
 
         # update tracks
         for track in tracker.tracks:
@@ -179,9 +184,9 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
                 print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
 
         # calculate frames per second of running detections
-        inference_time = time.time() - start_time
-        all_time += inference_time
-        fps = 1.0 / inference_time
+        loop_time = time.time() - start_time
+        all_time += loop_time
+        fps = 1.0 / loop_time
         print("FPS: %.2f" % fps)
 
         if count:
@@ -203,10 +208,20 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
     
     print("Inference total time: %.4f" % all_time)
     print("Frames: ", frame_num)
-    mean_time = all_time / frame_num
+    mean_loop_time = all_time / frame_num
+    mean_detection_time = all_detection_time / frame_num
+    mean_tracker_time = all_time_racker / frame_num
+    
     mean_fps = frame_num / all_time
-    print("Mean inference time: %.4f" % mean_time)
+    mean_detection_fps = frame_num / all_detection_time
+    mean_tracker_fps = frame_num / all_time_racker
+
+    print("Mean inference time: %.4f" % mean_loop_time)
     print("Mean FPS: %.4f" % mean_fps)
+    print("Mean detection time: %.4f" % mean_detection_time)
+    print("Mean detection FPS: %.4f" % mean_detection_fps)
+    print("Mean tracker time: %.4f" % mean_tracker_time)
+    print("Mean tracker FPS: %.4f" % mean_tracker_fps)
 
 
 if __name__ == '__main__':
