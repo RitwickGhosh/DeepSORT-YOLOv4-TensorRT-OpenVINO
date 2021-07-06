@@ -10,6 +10,7 @@ import ctypes
 
 import numpy as np
 import cv2
+import time
 import tensorrt as trt
 import pycuda.autoinit
 import pycuda.driver as cuda
@@ -312,6 +313,8 @@ class TrtYOLO(object):
         # Set host input to the image. The do_inference() function
         # will copy the input to the GPU before executing.
         self.inputs[0].host = np.ascontiguousarray(img_resized)
+
+        inference_start = time.time()
         if self.cuda_ctx:
             self.cuda_ctx.push()
         trt_outputs = self.inference_fn(
@@ -322,6 +325,7 @@ class TrtYOLO(object):
             stream=self.stream)
         if self.cuda_ctx:
             self.cuda_ctx.pop()
+        inference_stop = time.time()
 
         boxes, scores, classes = _postprocess_yolo(
             trt_outputs, img.shape[1], img.shape[0], self.score_threshold,
@@ -332,10 +336,10 @@ class TrtYOLO(object):
         boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]], 0, img.shape[1]-1)
         boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]], 0, img.shape[0]-1)
 
-        # format bounding boxes from ymin, xmin, ymax, xmax ---> xmin, ymin, width, height
+        # format bounding boxes from xmin, ymin, xmax, ymax ---> xmin, ymin, width, height
         xy_min = np.hstack([np.zeros((boxes.shape[0], 2)), boxes[:,:2]])
         bboxes = np.subtract(boxes, xy_min)
 
         num_objects = np.array(len(classes))
 
-        return bboxes, scores, classes, num_objects, 0
+        return bboxes, scores, classes, num_objects, inference_stop-inference_start

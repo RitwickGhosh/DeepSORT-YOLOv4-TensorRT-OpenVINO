@@ -1,6 +1,11 @@
 import os
+import sys
 import cv2
 import time
+# import logging
+# logging.basicConfig(format="[ %(levelname)s ] %(message)s", level=logging.INFO, stream=sys.stdout)
+# log = logging.getLogger()
+
 import numpy as np
 import matplotlib.pyplot as plt
 from absl import app, flags, logging
@@ -9,18 +14,17 @@ from absl.flags import FLAGS
 # comment out below line to enable tensorflow logging outputs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-# tensorflow yolo core imports
-from tf_yolo.core.utils import read_class_names
 # deep sort imports
 from deep_sort import preprocessing, nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
 # YOLO detectors
-from detectors import TfYOLO, TfliteYOLO, TrtYOLO
+#from detectors import TfYOLO, TfliteYOLO, TrtYOLO
+from detectors import TfliteYOLO, OpenvinoYOLO
 
 
-flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
+flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt, openvino)')
 flags.DEFINE_string('weights', './data/tf/yolov4-416', 'path to weights file')
 flags.DEFINE_string('names', './data/classes/coco.names', 'path to yolo names file')
 flags.DEFINE_integer('size', 416, 'resize images to')
@@ -31,6 +35,7 @@ flags.DEFINE_string('output', None, 'path to output video')
 flags.DEFINE_string('output_format', 'XVID', 'codec used in VideoWriter when saving video to file')
 flags.DEFINE_float('iou', 0.45, 'iou threshold')
 flags.DEFINE_float('score', 0.50, 'score threshold')
+flags.DEFINE_string('device', 'MYRIAD', 'OpenVINO inference device, available: {MYRIAD, CPU, GPU}')
 flags.DEFINE_boolean('dont_show', False, 'dont show video output')
 flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
@@ -44,6 +49,7 @@ def main(_argv):
     
     # initialize deep sort
     model_filename = 'data/deep_sort_model/mars-small128.pb'
+    # model_filename = 'data/deep_sort_model/mars-small128.tflite'
     encoder = gdet.create_box_encoder(model_filename, batch_size=1)
     # calculate cosine distance metric
     metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
@@ -51,10 +57,11 @@ def main(_argv):
     tracker = Tracker(metric)
 
     # read in all class names from config
-    class_names = read_class_names(FLAGS.names)
+    with open(FLAGS.names, 'r') as f:
+        class_names = f.read().split('\n')
 
     # by default allow all classes in .names file
-    allowed_classes = list(class_names.values())
+    allowed_classes = class_names
 
     # custom allowed classes (uncomment line below to customize tracker for only people)
     # allowed_classes = ['person']
@@ -80,6 +87,11 @@ def main(_argv):
     # load tensorrt engine if flag is set
     elif FLAGS.framework == 'trt':
         detector = TrtYOLO(**detector_config)
+    # load openvino xml model file
+    elif FLAGS.framework == 'openvino':
+        detector_config['device'] = FLAGS.device
+
+        detector = OpenvinoYOLO(**detector_config)
 
     # begin video capture
     video_path = FLAGS.video
