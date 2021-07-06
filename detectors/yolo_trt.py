@@ -8,9 +8,9 @@ from __future__ import print_function
 
 import ctypes
 
-import numpy as np
 import cv2
 import time
+import numpy as np
 import tensorrt as trt
 import pycuda.autoinit
 import pycuda.driver as cuda
@@ -22,40 +22,6 @@ except OSError as e:
     raise SystemExit('ERROR: failed to load ./plugins/libyolo_layer.so.  '
                      'Did you forget to do a "make" in the "./plugins/" '
                      'subdirectory?') from e
-
-
-def _preprocess_yolo(img, input_shape, letter_box=False):
-    """Preprocess an image before TRT YOLO inferencing.
-
-    # Args
-        img: int8 numpy array of shape (img_h, img_w, 3)
-        input_shape: a tuple of (H, W)
-        letter_box: boolean, specifies whether to keep aspect ratio and
-                    create a "letterboxed" image for inference
-
-    # Returns
-        preprocessed img: float32 numpy array of shape (3, H, W)
-    """
-    if letter_box:
-        img_h, img_w, _ = img.shape
-        new_h, new_w = input_shape[0], input_shape[1]
-        offset_h, offset_w = 0, 0
-        if (new_w / img_w) <= (new_h / img_h):
-            new_h = int(img_h * new_w / img_w)
-            offset_h = (input_shape[0] - new_h) // 2
-        else:
-            new_w = int(img_w * new_h / img_h)
-            offset_w = (input_shape[1] - new_w) // 2
-        resized = cv2.resize(img, (new_w, new_h))
-        img = np.full((input_shape[0], input_shape[1], 3), 127, dtype=np.uint8)
-        img[offset_h:(offset_h + new_h), offset_w:(offset_w + new_w), :] = resized
-    else:
-        img = cv2.resize(img, (input_shape[1], input_shape[0]))
-
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = img.transpose((2, 0, 1)).astype(np.float32)
-    img /= 255.0
-    return img
 
 
 def _nms_boxes(detections, nms_threshold):
@@ -97,71 +63,6 @@ def _nms_boxes(detections, nms_threshold):
 
     keep = np.array(keep)
     return keep
-
-
-def _postprocess_yolo(trt_outputs, img_w, img_h, conf_th, nms_threshold,
-                      input_shape, letter_box=False):
-    """Postprocess TensorRT outputs.
-
-    # Args
-        trt_outputs: a list of 2 or 3 tensors, where each tensor
-                    contains a multiple of 7 float32 numbers in
-                    the order of [x, y, w, h, box_confidence, class_id, class_prob]
-        conf_th: confidence threshold
-        letter_box: boolean, referring to _preprocess_yolo()
-
-    # Returns
-        boxes, scores, classes (after NMS)
-    """
-    # filter low-conf detections and concatenate results of all yolo layers
-    detections = []
-    for o in trt_outputs:
-        dets = o.reshape((-1, 7))
-        dets = dets[dets[:, 4] * dets[:, 6] >= conf_th]
-        detections.append(dets)
-    detections = np.concatenate(detections, axis=0)
-
-    if len(detections) == 0:
-        boxes = np.zeros((0, 4), dtype=np.int)
-        scores = np.zeros((0,), dtype=np.float32)
-        classes = np.zeros((0,), dtype=np.float32)
-    else:
-        box_scores = detections[:, 4] * detections[:, 6]
-
-        # scale x, y, w, h from [0, 1] to pixel values
-        old_h, old_w = img_h, img_w
-        offset_h, offset_w = 0, 0
-        if letter_box:
-            if (img_w / input_shape[1]) >= (img_h / input_shape[0]):
-                old_h = int(input_shape[0] * img_w / input_shape[1])
-                offset_h = (old_h - img_h) // 2
-            else:
-                old_w = int(input_shape[1] * img_h / input_shape[0])
-                offset_w = (old_w - img_w) // 2
-        detections[:, 0:4] *= np.array(
-            [old_w, old_h, old_w, old_h], dtype=np.float32)
-
-        # NMS
-        nms_detections = np.zeros((0, 7), dtype=detections.dtype)
-        for class_id in set(detections[:, 5]):
-            idxs = np.where(detections[:, 5] == class_id)
-            cls_detections = detections[idxs]
-            keep = _nms_boxes(cls_detections, nms_threshold)
-            nms_detections = np.concatenate(
-                [nms_detections, cls_detections[keep]], axis=0)
-
-        xx = nms_detections[:, 0].reshape(-1, 1)
-        yy = nms_detections[:, 1].reshape(-1, 1)
-        if letter_box:
-            xx = xx - offset_w
-            yy = yy - offset_h
-        ww = nms_detections[:, 2].reshape(-1, 1)
-        hh = nms_detections[:, 3].reshape(-1, 1)
-        boxes = np.concatenate([xx, yy, xx+ww, yy+hh], axis=1) + 0.5
-        boxes = boxes.astype(np.int)
-        scores = nms_detections[:, 4] * nms_detections[:, 6]
-        classes = nms_detections[:, 5]
-    return boxes, scores, classes
 
 
 class HostDeviceMem(object):
@@ -299,16 +200,114 @@ class TrtYOLO(object):
             if self.cuda_ctx:
                 self.cuda_ctx.pop()
 
+
     def __del__(self):
         """Free CUDA memories."""
         del self.outputs
         del self.inputs
         del self.stream
 
+
+    def _preprocess_yolo(self, img, letter_box=False):
+        """Preprocess an image before TRT YOLO inferencing.
+
+        # Args
+            img: int8 numpy array of shape (img_h, img_w, 3)
+            letter_box: boolean, specifies whether to keep aspect ratio and
+                        create a "letterboxed" image for inference
+
+        # Returns
+            preprocessed img: float32 numpy array of shape (3, H, W)
+        """
+        if letter_box:
+            img_h, img_w, _ = img.shape
+            new_h, new_w = self.input_shape[0], self.input_shape[1]
+            offset_h, offset_w = 0, 0
+            if (new_w / img_w) <= (new_h / img_h):
+                new_h = int(img_h * new_w / img_w)
+                offset_h = (self.input_shape[0] - new_h) // 2
+            else:
+                new_w = int(img_w * new_h / img_h)
+                offset_w = (self.input_shape[1] - new_w) // 2
+            resized = cv2.resize(img, (new_w, new_h))
+            img = np.full((self.input_shape[0], self.input_shape[1], 3), 127, dtype=np.uint8)
+            img[offset_h:(offset_h + new_h), offset_w:(offset_w + new_w), :] = resized
+        else:
+            img = cv2.resize(img, (self.input_shape[1], self.input_shape[0]))
+
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = img.transpose((2, 0, 1)).astype(np.float32)
+        img /= 255.0
+        return img
+
+
+    def _postprocess_yolo(self, trt_outputs, img_w, img_h, letter_box=False):
+        """Postprocess TensorRT outputs.
+
+        # Args
+            trt_outputs: a list of 2 or 3 tensors, where each tensor
+                        contains a multiple of 7 float32 numbers in
+                        the order of [x, y, w, h, box_confidence, class_id, class_prob]
+            letter_box: boolean, referring to _preprocess_yolo()
+
+        # Returns
+            boxes, scores, classes (after NMS)
+        """
+        # filter low-conf detections and concatenate results of all yolo layers
+        detections = []
+        for o in trt_outputs:
+            dets = o.reshape((-1, 7))
+            dets = dets[dets[:, 4] * dets[:, 6] >= self.score_threshold]
+            detections.append(dets)
+        detections = np.concatenate(detections, axis=0)
+
+        if len(detections) == 0:
+            boxes = np.zeros((0, 4), dtype=np.int)
+            scores = np.zeros((0,), dtype=np.float32)
+            classes = np.zeros((0,), dtype=np.float32)
+        else:
+            box_scores = detections[:, 4] * detections[:, 6]
+
+            # scale x, y, w, h from [0, 1] to pixel values
+            old_h, old_w = img_h, img_w
+            offset_h, offset_w = 0, 0
+            if letter_box:
+                if (img_w / self.input_shape[1]) >= (img_h / self.input_shape[0]):
+                    old_h = int(self.input_shape[0] * img_w / self.input_shape[1])
+                    offset_h = (old_h - img_h) // 2
+                else:
+                    old_w = int(self.input_shape[1] * img_h / self.input_shape[0])
+                    offset_w = (old_w - img_w) // 2
+            detections[:, 0:4] *= np.array(
+                [old_w, old_h, old_w, old_h], dtype=np.float32)
+
+            # NMS
+            nms_detections = np.zeros((0, 7), dtype=detections.dtype)
+            for class_id in set(detections[:, 5]):
+                idxs = np.where(detections[:, 5] == class_id)
+                cls_detections = detections[idxs]
+                keep = _nms_boxes(cls_detections, self.iou_threshold)
+                nms_detections = np.concatenate(
+                    [nms_detections, cls_detections[keep]], axis=0)
+
+            xx = nms_detections[:, 0].reshape(-1, 1)
+            yy = nms_detections[:, 1].reshape(-1, 1)
+            if letter_box:
+                xx = xx - offset_w
+                yy = yy - offset_h
+            ww = nms_detections[:, 2].reshape(-1, 1)
+            hh = nms_detections[:, 3].reshape(-1, 1)
+            boxes = np.concatenate([xx, yy, xx+ww, yy+hh], axis=1) + 0.5
+            boxes = boxes.astype(np.int)
+            scores = nms_detections[:, 4] * nms_detections[:, 6]
+            classes = nms_detections[:, 5]
+        return boxes, scores, classes
+
+
     def detect(self, img, letter_box=None):
         """Detect objects in the input image."""
         letter_box = self.letter_box if letter_box is None else letter_box
-        img_resized = _preprocess_yolo(img, self.input_shape, letter_box)
+        img_resized = self._preprocess_yolo(img, letter_box)
 
         # Set host input to the image. The do_inference() function
         # will copy the input to the GPU before executing.
@@ -327,10 +326,9 @@ class TrtYOLO(object):
             self.cuda_ctx.pop()
         inference_stop = time.time()
 
-        boxes, scores, classes = _postprocess_yolo(
-            trt_outputs, img.shape[1], img.shape[0], self.score_threshold,
-            nms_threshold=self.iou_threshold, input_shape=self.input_shape,
-            letter_box=letter_box)
+        stop_time = time.time()
+
+        boxes, scores, classes = self._postprocess_yolo(trt_outputs, img.shape[1], img.shape[0], letter_box=letter_box)
 
         # clip x1, y1, x2, y2 within original image
         boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]], 0, img.shape[1]-1)
