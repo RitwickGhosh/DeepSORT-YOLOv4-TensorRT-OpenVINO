@@ -52,6 +52,7 @@
 from __future__ import print_function
 
 import os
+import cv2
 import argparse
 
 import tensorrt as trt
@@ -123,7 +124,7 @@ def build_engine(model_name, img_dir, quant_mode, dla_core, verbose=False):
             builder.max_batch_size = MAX_BATCH_SIZE
             builder.max_workspace_size = 1 << 30
             if quant_mode == 'fp32':
-                builder.fp16_mode = True
+                builder.fp16_mode = False
             elif quant_mode == 'fp16':
                 builder.fp16_mode = True # alternative: builder.platform_has_fast_fp16
             elif quant_mode == 'int8':
@@ -145,9 +146,7 @@ def build_engine(model_name, img_dir, quant_mode, dla_core, verbose=False):
                 (MAX_BATCH_SIZE, 3, net_h, net_w),  # opt shape
                 (MAX_BATCH_SIZE, 3, net_h, net_w))  # max shape
             config.add_optimization_profile(profile)
-            if quant_mode == 'fp32':
-                config.set_flag(trt.BuilderFlag.FP32)
-            elif quant_mode == 'fp16':
+            if quant_mode == 'fp16':
                 config.set_flag(trt.BuilderFlag.FP16)
             elif quant_mode == 'int8':
                 config.set_flag(trt.BuilderFlag.FP16)

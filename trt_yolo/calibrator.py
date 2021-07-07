@@ -57,8 +57,8 @@ images instead of MNIST.
 
 import os
 
-import numpy as np
 import cv2
+import numpy as np
 import pycuda.autoinit
 import pycuda.driver as cuda
 import tensorrt as trt
