@@ -1,42 +1,39 @@
 import os
 import cv2
 import time
+import click
 import numpy as np
 import matplotlib.pyplot as plt
-from absl import app, flags, logging
-from absl.flags import FLAGS
 
 # comment out below line to enable tensorflow logging outputs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-# tensorflow yolo core imports
-from tf_yolo.core.utils import read_class_names
 # deep sort imports
 from deep_sort import preprocessing, nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
 # YOLO detectors
-from detectors import TfYOLO, TfliteYOLO, TrtYOLO
+from detectors import OpenCVYOLO, TfYOLO, TfliteYOLO, TrtYOLO
 
 
-flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
-flags.DEFINE_string('weights', './data/tf/yolov4-416', 'path to weights file')
-flags.DEFINE_string('names', './data/classes/coco.names', 'path to yolo names file')
-flags.DEFINE_integer('size', 416, 'resize images to')
-flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
-flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
-flags.DEFINE_string('video', './data/video/test.mp4', 'path to input video or set to 0 for webcam')
-flags.DEFINE_string('output', None, 'path to output video')
-flags.DEFINE_string('output_format', 'XVID', 'codec used in VideoWriter when saving video to file')
-flags.DEFINE_float('iou', 0.45, 'iou threshold')
-flags.DEFINE_float('score', 0.50, 'score threshold')
-flags.DEFINE_boolean('dont_show', False, 'dont show video output')
-flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
-flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
-
-
-def main(_argv):
+@click.command()
+@click.option('-f', '--framework', default='tf', type=str, help='Inference framework: {tf, tflite, trt, opencv}')
+@click.option('-m', '--model_path', default='./data/tf/yolov4-416', type=str, help='Path to detection model')
+@click.option('-n', '--yolo_names', default='./data/classes/coco.names', type=str, help='Path to YOLO class names file')
+@click.option('-s', '--size', default=416, type=int, help='Model input size')
+@click.option('-t', '--tiny', default=False, type=bool, help='If YOLO tiny architecture')
+@click.option('-t', '--model_type', default='yolov4', type=str, help='yolov3 or yolov4k')
+@click.option('-v', '--video_path', default='./data/video/test.mp4', type=str, help='Path to input video')
+@click.option('-o', '--output', default=None, type=str, help='Path to output, inferenced video')
+@click.option('--output_format', default='XVID', type=str, help='Codec used in VideoWriter when saving video to file')
+@click.option('--iou', default=0.45, type=float, help='IoU threshold')
+@click.option('--score_threshold', default=0.5, type=float, help='Confidence score threshold')
+@click.option('--opencv_cuda_target_precision', default='FP32', type=str, help='Precision of OpenCV DNN model')
+@click.option('--dont_show', default=True, type=bool, help='Do not show video output')
+@click.option('--info', default=False, type=bool, help='Show detailed info of tracked objects')
+@click.option('--count', default=False, type=bool, help='Count objects being tracked on screen')
+def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, output, output_format, iou, score_threshold, opencv_cuda_target_precision, dont_show, info, count):
     # Definition of the parameters
     max_cosine_distance = 0.4
     nn_budget = None
@@ -51,54 +48,68 @@ def main(_argv):
     tracker = Tracker(metric)
 
     # read in all class names from config
-    class_names = read_class_names(FLAGS.names)
+    with open(yolo_names, 'r') as f:
+        class_names = f.read().split('\n')
 
     # by default allow all classes in .names file
-    allowed_classes = list(class_names.values())
+    allowed_classes = class_names
 
     # custom allowed classes (uncomment line below to customize tracker for only people)
     # allowed_classes = ['person']
 
     detector_config = {
-        'model_path': FLAGS.weights,
-        'iou_threshold': FLAGS.iou, 
-        'score_threshold': FLAGS.score
+        'model_path': model_path,
+        'iou_threshold': iou, 
+        'score_threshold': score_threshold
     }
 
     # load tf saved model
-    if FLAGS.framework == 'tf':
-        detector_config['input_size'] = FLAGS.size
+    if framework == 'tf':
+        detector_config['input_size'] = size
 
         detector = TfYOLO(**detector_config)
     # load tflite model if flag is set
-    elif FLAGS.framework == 'tflite':
-        detector_config['input_size'] = FLAGS.size
-        detector_config['model_type'] = FLAGS.model
-        detector_config['tiny'] = FLAGS.tiny
+    elif framework == 'tflite':
+        detector_config['input_size'] = size
+        detector_config['model_type'] = model_type
+        detector_config['tiny'] =tiny
 
         detector = TfliteYOLO(**detector_config)
     # load tensorrt engine if flag is set
-    elif FLAGS.framework == 'trt':
+    elif framework == 'trt':
         detector = TrtYOLO(**detector_config)
+    # load darknet weights with opencv if flag is set
+    elif framework == 'opencv':
+        detector_config['cfg_file'] = model_path.replace('weights', 'cfg')
+        detector_config['input_size'] = size
+        detector_config['weights_precision'] = opencv_cuda_target_precision
+
+        detector = OpenCVYOLO(**detector_config)
 
     # begin video capture
-    video_path = FLAGS.video
     try:
         vid = cv2.VideoCapture(int(video_path))
     except:
         vid = cv2.VideoCapture(video_path)
 
     # get video ready to save locally if flag is set
-    if FLAGS.output:
+    if output:
         # by default VideoCapture returns float instead of int
         width = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = int(vid.get(cv2.CAP_PROP_FPS))
-        codec = cv2.VideoWriter_fourcc(*FLAGS.output_format)
-        out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
+        codec = cv2.VideoWriter_fourcc(*output_format)
+        out = cv2.VideoWriter(output, codec, fps, (width, height))
+
+    # detector warm up
+    print("{} detector warm up".format(framework))
+    for _ in range(5):
+        _, _, _, _, _ = detector.detect(np.zeros((2160,3840,3), dtype=np.uint8))
 
     frame_num = 0
     all_time = 0
+    all_detection_time = 0
+    all_time_racker = 0
 
     # while video is running
     while True:
@@ -110,15 +121,13 @@ def main(_argv):
             break
         frame_num +=1
         print('Frame #: ', frame_num)
-        
-        # preprocess frame
-        # TODO: move preprocessing from detectors
 
         # start frame inference timer
         start_time = time.time()
 
         # get detections from detector
         bboxes, scores, classes, num_objects, detection_time = detector.detect(frame)
+        all_detection_time += detection_time
 
         # loop through objects and use class index to get class name, allow only classes in allowed_classes list
         names = []
@@ -135,11 +144,6 @@ def main(_argv):
         scores = np.delete(scores, deleted_indx, axis=0)
         names = np.array(names)
 
-        # if FLAGS.count:
-        #     count = len(names)
-        #     cv2.putText(frame, "Objects being tracked: {}".format(count), (5, 35), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0, 255, 0), 2)
-        #     print("Objects being tracked: {}".format(count))
-
         # encode yolo detections and feed to tracker
         features = encoder(frame, bboxes)
         detections = [Detection(bbox, score, class_name, feature) for bbox, score, class_name, feature in zip(bboxes, scores, names, features)]
@@ -155,9 +159,11 @@ def main(_argv):
         indices = preprocessing.non_max_suppression(boxs, classes, nms_max_overlap, scores)
         detections = [detections[i] for i in indices]       
 
-        # Call the tracker
+        # call the tracker
+        tracker_start = time.time()
         tracker.predict()
         tracker.update(detections)
+        all_time_racker += time.time() - tracker_start
 
         # update tracks
         for track in tracker.tracks:
@@ -174,37 +180,49 @@ def main(_argv):
             cv2.putText(frame, class_name + "-" + str(track.track_id),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, (255,255,255),2)
 
             # if enable info flag then print details about each track
-            if FLAGS.info:
+            if info:
                 print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
 
         # calculate frames per second of running detections
-        inference_time = time.time() - start_time
-        all_time += inference_time
-        fps = 1.0 / inference_time
+        loop_time = time.time() - start_time
+        all_time += loop_time
+        fps = 1.0 / loop_time
         print("FPS: %.2f" % fps)
+
+        if count:
+            object_count = len(names)
+            cv2.putText(frame, "Objects being tracked: {}".format(object_count), (5, 35), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0, 255, 0), 2)
+            print("Objects being tracked: {}".format(object_count))
 
         result = np.asarray(frame)
         result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         
-        if not FLAGS.dont_show:
+        if not dont_show:
             cv2.imshow("Output Video", result)
         
         # if output flag is set, save video file
-        if FLAGS.output:
+        if output:
             out.write(result)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
     cv2.destroyAllWindows()
     
     print("Inference total time: %.4f" % all_time)
     print("Frames: ", frame_num)
-    mean_time = all_time / frame_num
+    mean_loop_time = all_time / frame_num
+    mean_detection_time = all_detection_time / frame_num
+    mean_tracker_time = all_time_racker / frame_num
+    
     mean_fps = frame_num / all_time
-    print("Mean inference time: %.4f" % mean_time)
+    mean_detection_fps = frame_num / all_detection_time
+    mean_tracker_fps = frame_num / all_time_racker
+
+    print("Mean inference time: %.4f" % mean_loop_time)
     print("Mean FPS: %.4f" % mean_fps)
+    print("Mean detection time: %.4f" % mean_detection_time)
+    print("Mean detection FPS: %.4f" % mean_detection_fps)
+    print("Mean tracker time: %.4f" % mean_tracker_time)
+    print("Mean tracker FPS: %.4f" % mean_tracker_fps)
 
 
 if __name__ == '__main__':
-    try:
-        app.run(main)
-    except SystemExit:
-        pass
+    main()

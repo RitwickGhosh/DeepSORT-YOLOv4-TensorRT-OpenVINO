@@ -1,6 +1,6 @@
 
-# Created by https://www.toptal.com/developers/gitignore/api/python,c++,c,cmake,visualstudiocode,linux,pycharm,macos
-# Edit at https://www.toptal.com/developers/gitignore?templates=python,c++,c,cmake,visualstudiocode,linux,pycharm,macos
+# Created by https://www.toptal.com/developers/gitignore/api/c,c++,linux,macos,cmake,python,pycharm,visualstudiocode,jupyternotebooks
+# Edit at https://www.toptal.com/developers/gitignore/api/c,c++,linux,macos,cmake,python,pycharm,visualstudiocode,jupyternotebooks
 
 ### C ###
 # Prerequisites
@@ -96,6 +96,20 @@ CMakeUserPresets.json
 ### CMake Patch ###
 # External projects
 *-prefix/
+
+### JupyterNotebooks ###
+# gitignore template for Jupyter Notebooks
+# website: http://jupyter.org/
+
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Remove previous ipynb_checkpoints
+#   git rm -r .ipynb_checkpoints/
 
 ### Linux ###
 *~
@@ -405,7 +419,7 @@ Thumbs.db
 .history
 .ionide
 
-# End of https://www.toptal.com/developers/gitignore/api/python,c++,c,cmake,visualstudiocode,linux,pycharm,macos
+# End of https://www.toptal.com/developers/gitignore/api/c,c++,linux,macos,cmake,python,pycharm,visualstudiocode,jupyternotebooks
 
 ### Calibration images directory structure ###
 trt_yolo/calib_images/*
