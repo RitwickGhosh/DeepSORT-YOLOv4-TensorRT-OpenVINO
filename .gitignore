@@ -424,3 +424,19 @@ Thumbs.db
 ### Calibration images directory structure ###
 trt_yolo/calib_images/*
 !trt_yolo/calib_images/.gitkeep
+
+### Models files ###
+*.xml
+*.bin
+*.mapping
+*.trt
+*.onnx
+*.pb
+*.tflite
+*.weights
+*.cfg
+data/darknet/*
+data/tf/*
+data/tflite/*
+data/trt/*
+data/openvino/*
