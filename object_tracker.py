@@ -23,7 +23,7 @@ from detectors import OpenCVYOLO, TfYOLO, TfliteYOLO, TrtYOLO
 @click.option('-n', '--yolo_names', default='./data/classes/coco.names', type=str, help='Path to YOLO class names file')
 @click.option('-s', '--size', default=416, type=int, help='Model input size')
 @click.option('-t', '--tiny', default=False, type=bool, help='If YOLO tiny architecture')
-@click.option('-t', '--model_type', default='yolov4', type=str, help='yolov3 or yolov4k')
+@click.option('-t', '--model_type', default='yolov4', type=str, help='yolov3 or yolov4')
 @click.option('-v', '--video_path', default='./data/video/test.mp4', type=str, help='Path to input video')
 @click.option('-o', '--output', default=None, type=str, help='Path to output, inferenced video')
 @click.option('--output_format', default='XVID', type=str, help='Codec used in VideoWriter when saving video to file')
