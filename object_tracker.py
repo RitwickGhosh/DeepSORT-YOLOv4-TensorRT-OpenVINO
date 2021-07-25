@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 import time
 import click
@@ -13,12 +14,13 @@ from deep_sort import preprocessing, nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
+
 # YOLO detectors
 from detectors import *
 
 
 @click.command()
-@click.option('-f', '--framework', default='tf', type=str, help='Inference framework: {tf, tflite, trt, opencv}')
+@click.option('-f', '--framework', default='tf', type=str, help='Inference framework: {tf, tflite, trt, opencv, openvino}')
 @click.option('-m', '--model_path', default='./data/tf/yolov4-416', type=str, help='Path to detection model')
 @click.option('-n', '--yolo_names', default='./data/classes/coco.names', type=str, help='Path to YOLO class names file')
 @click.option('-s', '--size', default=416, type=int, help='Model input size')
@@ -29,11 +31,14 @@ from detectors import *
 @click.option('--output_format', default='XVID', type=str, help='Codec used in VideoWriter when saving video to file')
 @click.option('--iou', default=0.45, type=float, help='IoU threshold')
 @click.option('--score_threshold', default=0.5, type=float, help='Confidence score threshold')
-@click.option('--opencv_cuda_target_precision', default='FP32', type=str, help='Precision of OpenCV DNN model')
+@click.option('--opencv_dnn_target', default='CPU', type=str, help='Precision of OpenCV DNN model')
+@click.option('--device', default='MYRIAD', type=str, help='OpenVINO inference device, available: {MYRIAD, CPU, GPU}')
 @click.option('--dont_show', default=True, type=bool, help='Do not show video output')
 @click.option('--info', default=False, type=bool, help='Show detailed info of tracked objects')
 @click.option('--count', default=False, type=bool, help='Count objects being tracked on screen')
-def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, output, output_format, iou, score_threshold, opencv_cuda_target_precision, dont_show, info, count):
+def main(framework, model_path, yolo_names, size, tiny, model_type, 
+         video_path, output, output_format, iou, score_threshold, 
+         opencv_dnn_target, device, dont_show, info, count):
     # Definition of the parameters
     max_cosine_distance = 0.4
     nn_budget = None
@@ -72,17 +77,22 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
     elif framework == 'tflite':
         detector_config['input_size'] = size
         detector_config['model_type'] = model_type
-        detector_config['tiny'] =tiny
+        detector_config['tiny'] = tiny
 
         detector = TfliteYOLO(**detector_config)
     # load tensorrt engine if flag is set
     elif framework == 'trt':
         detector = TrtYOLO(**detector_config)
+    # load openvino xml model file
+    elif framework == 'openvino':
+        detector_config['device'] = device
+
+        detector = OpenvinoYOLO(**detector_config)
     # load darknet weights with opencv if flag is set
     elif framework == 'opencv':
         detector_config['cfg_file'] = model_path.replace('weights', 'cfg')
         detector_config['input_size'] = size
-        detector_config['weights_precision'] = opencv_cuda_target_precision
+        detector_config['opencv_dnn_target'] = opencv_dnn_target
 
         detector = OpenCVYOLO(**detector_config)
 
@@ -109,7 +119,7 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
     frame_num = 0
     all_time = 0
     all_detection_time = 0
-    all_time_racker = 0
+    all_time_tracker = 0
 
     # while video is running
     while True:
@@ -163,7 +173,7 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
         tracker_start = time.time()
         tracker.predict()
         tracker.update(detections)
-        all_time_racker += time.time() - tracker_start
+        all_time_tracker += time.time() - tracker_start
 
         # update tracks
         for track in tracker.tracks:
@@ -210,11 +220,11 @@ def main(framework, model_path, yolo_names, size, tiny, model_type, video_path, 
     print("Frames: ", frame_num)
     mean_loop_time = all_time / frame_num
     mean_detection_time = all_detection_time / frame_num
-    mean_tracker_time = all_time_racker / frame_num
+    mean_tracker_time = all_time_tracker / frame_num
     
     mean_fps = frame_num / all_time
     mean_detection_fps = frame_num / all_detection_time
-    mean_tracker_fps = frame_num / all_time_racker
+    mean_tracker_fps = frame_num / all_time_tracker
 
     print("Mean inference time: %.4f" % mean_loop_time)
     print("Mean FPS: %.4f" % mean_fps)

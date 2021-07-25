@@ -313,7 +313,7 @@ class TrtYOLO(object):
         # will copy the input to the GPU before executing.
         self.inputs[0].host = np.ascontiguousarray(img_resized)
 
-        start_time = time.time()
+        inference_start = time.time()
         if self.cuda_ctx:
             self.cuda_ctx.push()
         trt_outputs = self.inference_fn(
@@ -324,6 +324,7 @@ class TrtYOLO(object):
             stream=self.stream)
         if self.cuda_ctx:
             self.cuda_ctx.pop()
+        inference_stop = time.time()
 
         stop_time = time.time()
 
@@ -339,4 +340,4 @@ class TrtYOLO(object):
 
         num_objects = np.array(len(classes))
 
-        return bboxes, scores, classes, num_objects, stop_time-start_time
+        return bboxes, scores, classes, num_objects, inference_stop-inference_start

@@ -2,9 +2,9 @@ import cv2
 import time
 import numpy as np
 import tensorflow as tf
+# import tflite_runtime.interpreter as tflite
 
-from tf_yolo.core.utils import format_boxes
-from tf_yolo.core.yolov4 import filter_boxes
+from .utils import format_boxes, filter_boxes
 
 
 class TfliteYOLO(object):
@@ -39,10 +39,10 @@ class TfliteYOLO(object):
         # run detections using yolov3 if flag is set
         if self.model_type == 'yolov3' and self.tiny == True:
             boxes, pred_conf = filter_boxes(pred_bbox[1], pred_bbox[0], score_threshold=self.score_threshold, 
-                                            input_shape=tf.constant([self.input_size, self.input_size]))
+                                            input_shape=(self.input_size, self.input_size))
         else:
             boxes, pred_conf = filter_boxes(pred_bbox[0], pred_bbox[1], score_threshold=self.score_threshold, 
-                                            input_shape=tf.constant([self.input_size, self.input_size]))
+                                            input_shape=(self.input_size, self.input_size))
 
         boxes, scores, classes, valid_detections = tf.image.combined_non_max_suppression(
             boxes=tf.reshape(boxes, (tf.shape(boxes)[0], -1, 1, 4)),
@@ -61,6 +61,12 @@ class TfliteYOLO(object):
         scores = scores[0:int(num_objects)]
         classes = classes.numpy()[0]
         classes = classes[0:int(num_objects)]
+
+        # num_objects = len(boxes[0])
+        # bboxes = boxes[0]
+        # scores = np.ones((num_objects)) * 0.75
+        # # classes = classes[0]
+        # classes = np.ones((num_objects))
 
         # format bounding boxes from normalized ymin, xmin, ymax, xmax ---> xmin, ymin, width, height
         bboxes = format_boxes(bboxes, original_h, original_w)
