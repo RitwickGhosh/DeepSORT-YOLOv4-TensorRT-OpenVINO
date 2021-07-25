@@ -1,143 +1,110 @@
-# yolov4-deepsort
-[![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1zmeSTP3J5zu2d5fHgsQC06DyYEYJFXq1?usp=sharing)
+# DeepSort YOLOv4 based object tracking
 
-Object tracking implemented with YOLOv4, DeepSort, and TensorFlow. YOLOv4 is a state of the art algorithm that uses deep convolutional neural networks to perform object detections. We can take the output of YOLOv4 feed these object detections into Deep SORT (Simple Online and Realtime Tracking with a Deep Association Metric) in order to create a highly accurate object tracker.
+The repository contains the implementation of [DeepSort](https://arxiv.org/abs/1703.07402) object tracking based on YOLOv4 detections. Detector inference class is implemented in several frameworks like TensorFlow, TensorFlow Lite, TensorRT, OpenCV, and OpenVINO to benchmark methods and use the best one for edge-tailored solutions.
 
-## Demo of Object Tracker on Persons
-<p align="center"><img src="data/helpers/demo.gif"\></p>
+<p align="center"><img src="data/helpers/ulica_03.gif"\></p>
 
-## Demo of Object Tracker on Cars
-<p align="center"><img src="data/helpers/cars.gif"\></p>
-
-## Getting Started
-To get started, install the proper dependencies either via Anaconda or Pip. I recommend Anaconda route for people using a GPU as it configures CUDA toolkit version for you.
-
-### Conda (Recommended)
+## How to use
 
 ```bash
-# Tensorflow CPU
-conda env create -f conda-cpu.yml
-conda activate yolov4-cpu
-
-# Tensorflow GPU
-conda env create -f conda-gpu.yml
-conda activate yolov4-gpu
+python3 object_tracker.py -f trt -m <PATH TO MODEL> -s <MODEL INPUT SIZE> -n <PATH TO FILE WITH CLASS NAMES> -v <PATH TO INPUT VIDEO> --dont_show True
 ```
 
-### Pip
-(TensorFlow 2 packages require a pip version >19.0.)
-```bash
-# TensorFlow CPU
-pip install -r requirements.txt
-
-# TensorFlow GPU
-pip install -r requirements-gpu.txt
-```
-### Nvidia Driver (For GPU, if you are not using Conda Environment and haven't set up CUDA yet)
-Make sure to use CUDA Toolkit version 10.1 as it is the proper version for the TensorFlow version used in this repository.
-https://developer.nvidia.com/cuda-10.1-download-archive-update2
-
-## Downloading Official YOLOv4 Pre-trained Weights
-Our object tracker uses YOLOv4 to make the object detections, which deep sort then uses to track. There exists an official pre-trained YOLOv4 object detector model that is able to detect 80 classes. For easy demo purposes we will use the pre-trained weights for our tracker.
-Download pre-trained yolov4.weights file: https://drive.google.com/open?id=1cewMfusmPjYWbrnuJRuKhPMwRe_b9PaT
-
-Copy and paste yolov4.weights from your downloads folder into the 'data' folder of this repository.
-
-If you want to use yolov4-tiny.weights, a smaller model that is faster at running detections but less accurate, download file here: https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v4_pre/yolov4-tiny.weights
-
-## Running the Tracker with YOLOv4
-To implement the object tracking using YOLOv4, first we convert the .weights into the corresponding TensorFlow model which will be saved to a checkpoints folder. Then all we need to do is run the object_tracker.py script to run our object tracker with YOLOv4, DeepSort and TensorFlow.
-```bash
-# Convert darknet weights to tensorflow model
-python save_model.py --model yolov4 
-
-# Run yolov4 deep sort object tracker on video
-python object_tracker.py --video ./data/video/test.mp4 --output ./outputs/demo.avi --model yolov4
-
-# Run yolov4 deep sort object tracker on webcam (set video flag to 0)
-python object_tracker.py --video 0 --output ./outputs/webcam.avi --model yolov4
-```
-The output flag allows you to save the resulting video of the object tracker running so that you can view it again later. Video will be saved to the path that you set. (outputs folder is where it will be if you run the above command!)
-
-If you want to run yolov3 set the model flag to ``--model yolov3``, upload the yolov3.weights to the 'data' folder and adjust the weights flag in above commands. (see all the available command line flags and descriptions of them in a below section)
-
-## Running the Tracker with YOLOv4-Tiny
-The following commands will allow you to run yolov4-tiny model. Yolov4-tiny allows you to obtain a higher speed (FPS) for the tracker at a slight cost to accuracy. Make sure that you have downloaded the tiny weights file and added it to the 'data' folder in order for commands to work!
-```
-# save yolov4-tiny model
-python save_model.py --weights ./data/yolov4-tiny.weights --output ./checkpoints/yolov4-tiny-416 --model yolov4 --tiny
-
-# Run yolov4-tiny object tracker
-python object_tracker.py --weights ./checkpoints/yolov4-tiny-416 --model yolov4 --video ./data/video/test.mp4 --output ./outputs/tiny.avi --tiny
-```
-
-## Resulting Video
-As mentioned above, the resulting video will save to wherever you set the ``--output`` command line flag path to. I always set it to save to the 'outputs' folder. You can also change the type of video saved by adjusting the ``--output_format`` flag, by default it is set to AVI codec which is XVID.
-
-Example video showing tracking of all coco dataset classes:
-<p align="center"><img src="data/helpers/all_classes.gif"\></p>
-
-## Filter Classes that are Tracked by Object Tracker
-By default the code is setup to track all 80 or so classes from the coco dataset, which is what the pre-trained YOLOv4 model is trained on. However, you can easily adjust a few lines of code in order to track any 1 or combination of the 80 classes. It is super easy to filter only the ``person`` class or only the ``car`` class which are most common.
-
-To filter a custom selection of classes all you need to do is comment out line 159 and uncomment out line 162 of [object_tracker.py](https://github.com/theAIGuysCode/yolov4-deepsort/blob/master/object_tracker.py) Within the list ``allowed_classes`` just add whichever classes you want the tracker to track. The classes can be any of the 80 that the model is trained on, see which classes you can track in the file [data/classes/coco.names](https://github.com/theAIGuysCode/yolov4-deepsort/blob/master/data/classes/coco.names)
-
-This example would allow the classes for person and car to be tracked.
-<p align="center"><img src="data/helpers/filter_classes.PNG"\></p>
-
-### Demo of Object Tracker set to only track the class 'person'
-<p align="center"><img src="data/helpers/demo.gif"\></p>
-
-### Demo of Object Tracker set to only track the class 'car'
-<p align="center"><img src="data/helpers/cars.gif"\></p>
-
-## Command Line Args Reference
+### Command line arguments
 
 ```bash
-save_model.py:
-  --weights: path to weights file
-    (default: './data/yolov4.weights')
-  --output: path to output
-    (default: './checkpoints/yolov4-416')
-  --[no]tiny: yolov4 or yolov4-tiny
-    (default: 'False')
-  --input_size: define input size of export model
-    (default: 416)
-  --framework: what framework to use (tf, trt, tflite)
-    (default: tf)
-  --model: yolov3 or yolov4
-    (default: yolov4)
-    
- object_tracker.py:
-  --video: path to input video (use 0 for webcam)
-    (default: './data/video/test.mp4')
-  --output: path to output video (remember to set right codec for given format. e.g. XVID for .avi)
-    (default: None)
-  --output_format: codec used in VideoWriter when saving video to file
-    (default: 'XVID)
-  --[no]tiny: yolov4 or yolov4-tiny
-    (default: 'false')
-  --weights: path to weights file
-    (default: './checkpoints/yolov4-416')
-  --framework: what framework to use (tf, trt, tflite)
-    (default: tf)
-  --model: yolov3 or yolov4
-    (default: yolov4)
-  --size: resize images to
-    (default: 416)
-  --iou: iou threshold
-    (default: 0.45)
-  --score: confidence threshold
-    (default: 0.50)
-  --dont_show: dont show video output
-    (default: False)
-  --info: print detailed info about tracked objects
-    (default: False)
+Usage: object_tracker.py [OPTIONS]
+
+Options:
+  -f, --framework TEXT            Inference framework: {tf, tflite, trt,
+                                  opencv, openvino}
+  -m, --model_path TEXT           Path to detection model
+  -n, --yolo_names TEXT           Path to YOLO class names file
+  -s, --size INTEGER              Model input size
+  -t, --tiny BOOLEAN              If YOLO tiny architecture
+  -t, --model_type TEXT           yolov3 or yolov4
+  -v, --video_path TEXT           Path to input video
+  -o, --output TEXT               Path to output, inferenced video
+  --output_format TEXT            Codec used in VideoWriter when saving video
+                                  to file
+  --iou FLOAT                     IoU threshold
+  --score_threshold FLOAT         Confidence score threshold
+  --opencv_cuda_target_precision TEXT
+                                  Precision of OpenCV DNN model
+  --dont_show BOOLEAN             Do not show video output
+  --info BOOLEAN                  Show detailed info of tracked objects
+  --count BOOLEAN                 Count objects being tracked on screen
+  --help                          Show this message and exit.
 ```
 
-### References  
+## Preparation of the algorithm
 
-   Huge shoutout goes to hunglc007 and nwojke for creating the backbones of this repository:
-  * [tensorflow-yolov4-tflite](https://github.com/hunglc007/tensorflow-yolov4-tflite)
-  * [Deep SORT Repository](https://github.com/nwojke/deep_sort)
+[YOLOv4](https://arxiv.org/abs/2004.10934) object detector was trained with the use of [Darknet](https://github.com/AlexeyAB/darknet) framework and on the [VisDrone datasets](http://aiskyeye.com/). Images were captured from UAV's perspective. Each independent object belongs to one of the 11 categories. Small and occluded parts of images where were many instances were marked as an ignored region (12 category). The YOLOv4 configuration file is in [data/darknet/yolov4_visdrone.cfg](data/darknet/yolov4_visdrone.cfg), classes file is in [data/classes/visdrone.names](data/classes/visdrone.names) and calculated sizes of anchor boxes are in [data/anchors/visdrone_anchors.txt](data/anchors/visdrone_anchors.txt).
+
+The optimization and quantization process was performed with use of [TensorRT](https://developer.nvidia.com/tensorrt) for [NVIDIA Jetson Xavier NX](https://developer.nvidia.com/embedded/jetson-xavier-nx) and [OpenVINO](https://docs.openvinotoolkit.org/latest/index.html) for [Intel Neural Compute Stick 2](https://software.intel.com/content/www/us/en/develop/hardware/neural-compute-stick.html). Steps for NVIDIA TensorRT are described in [trt_yolo/README.md](trt_yolo/README.md) file. Wheras, for OpenVINO was used ONNX file generated with instruction from [trt_yolo/README.md](trt_yolo/README.md) and then with use of OpenVINO [Model Optimizer](https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Convert_Model_From_ONNX.html) package and commands:
+
+```bash
+# for FP32 format
+python3 mo.py --input_model <PATH TO ONNX MODEL> --model_name <OUTPUT IR MODEL NAME> --data_type FP32 --batch 1
+
+# for FP16 format
+python3 mo.py --input_model <PATH TO ONNX MODEL> --model_name <OUTPUT IR MODEL NAME> --data_type FP16 --batch 1
+```
+
+Conversion to Tensorflow Lite was done with use of ONNX model and [onnx-tensorflow](https://github.com/onnx/onnx-tensorflow) package by command line interface:
+
+```bash
+onnx-tf convert -i /path/to/input.onnx -o /path/to/output
+```
+
+
+## Performance tests
+
+The benchmark tests were performed on [NVIDIA Jetson Xavier NX](https://developer.nvidia.com/embedded/jetson-xavier-nx) and [Intel Neural Compute Stick 2](https://software.intel.com/content/www/us/en/develop/hardware/neural-compute-stick.html). Jetson Xavier NX was in mode 2 (`sudo nvpmodel -m 0`) and clocks, fan were set to the maximum frequency with `sudo jetson clocks --fan` command. To evaluate Intel INCS 2 Raspberry Pi 4B was used. The evaluation results are listed below.
+
+**NVIDIA Jetson Xavier NX**
+
+|   YOLOv4-608 model   | average time per frame [s] | average detection time [s] | average  tracker time [s] |
+|:--------------------:|:--------------------------:|:--------------------------:|:-------------------------:|
+|    Tensorflow FP32   |           1.5475           |           0.3365           |           0.7518          |
+|     TensorRT FP32    |           1.1977           |           0.1787           |           0.6487          |
+|     TensorRT FP16    |           1.0545           |           0.0516           |           0.6583          |
+|     TensorRT INT8    |           0.6241           |           0.0301           |           0.3622          |
+| Tensorflow Lite FP32 |           22.7165          |           21.4231          |           0.8031          |
+| Tensorflow Lite FP16 |           17.1216          |           15.9608          |           0.7268          |
+
+**Intel Neural Compute Stick 2 with Raspberry Pi 4B**
+
+|  YOLOv4-608 model  | average time per frame [s] | average detection time [s] | average  tracker time [s] |
+|:------------------:|:--------------------------:|:--------------------------:|:-------------------------:|
+| OpenVINO FP32 USB3 |           5.5214           |           1.2708           |           0.1709          |
+| OpenVINO FP16 USB3 |           5.4409           |           1.2609           |           0.1738          |
+| OpenVINO FP32 USB2 |           5.8345           |           1.5661           |           0.1705          |
+| OpenVINO FP16 USB2 |           5.6797           |           1.5560           |           0.1723          |
+
+**Raspberry Pi 4B**
+
+|    YOLOv4-608 model   | average time per frame [s] | average detection time [s] | average  tracker time [s] |
+|:---------------------:|:--------------------------:|:--------------------------:|:-------------------------:|
+|  Tensorflow Lite FP32 |           19.9633          |           14.7623          |           0.2095          |
+|  Tensorflow Lite FP16 |           19.4803          |           14.4580          |           0.2058          |
+| OpenCV DNN TARGET CPU |           37.1923          |           31.1872          |           0.2491          |
+
+## Use cases
+
+The possible use cases of multiple object tracking are:
+- survilance monitoring
+- crossroads flow tracking
+- monitoring and warning in unsafe places
+
+## References
+
+Many thanks for great job for:
+
+- [The AI Guy](https://github.com/theAIGuysCode): [yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort), MIT License
+
+- [nwojke](https://github.com/nwojke): [deep_sort](https://github.com/nwojke/deep_sort), MIT License
+
+- [jkjung-avt](https://github.com/jkjung-avt): [tensorrt_demos](https://github.com/jkjung-avt/tensorrt_demos), MIT License
+
+- [hunglc007](https://github.com/hunglc007): [tensorflow-yolov4-tflite](https://github.com/hunglc007/tensorflow-yolov4-tflite), MIT License

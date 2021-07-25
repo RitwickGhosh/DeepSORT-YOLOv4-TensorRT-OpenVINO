@@ -6,6 +6,7 @@ dependencies:
   - click
   - matplotlib
   - opencv
+  - tqdm
   - cudnn
   - cudatoolkit==10.1.243
   - pip:
@@ -17,6 +18,7 @@ dependencies:
     - absl-py
     - easydict
     - pillow
+    - click
     - numpy>=1.15.1
     - onnx==1.4.1
     - pycuda>=2017.1.1

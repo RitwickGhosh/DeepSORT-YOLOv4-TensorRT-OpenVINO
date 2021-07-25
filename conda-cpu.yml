@@ -5,6 +5,7 @@ dependencies:
   - pip
   - matplotlib
   - opencv
+  - tqdm
   - pip:
     - opencv-python==4.1.1.26
     - easydict
@@ -14,5 +15,6 @@ dependencies:
     - absl-py
     - easydict
     - pillow
+    - click
     - numpy>=1.15.1
     - onnx==1.4.1
