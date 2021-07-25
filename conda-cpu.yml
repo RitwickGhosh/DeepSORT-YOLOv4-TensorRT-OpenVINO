@@ -5,11 +5,16 @@ dependencies:
   - pip
   - matplotlib
   - opencv
+  - tqdm
   - pip:
     - opencv-python==4.1.1.26
+    - easydict
     - lxml
     - tqdm
     - tensorflow==2.3.0rc0
     - absl-py
     - easydict
     - pillow
+    - click
+    - numpy>=1.15.1
+    - onnx==1.4.1
