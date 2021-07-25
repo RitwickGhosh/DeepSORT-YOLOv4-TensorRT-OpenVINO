@@ -22,5 +22,6 @@ python onnx_to_tensorrt.py -v -c 80 -m ./yolov4.onnx -q fp32 -o ./yolov4-fp32.tr
 python onnx_to_tensorrt.py -v -c 80 -m ./yolov4.onnx -q fp16 -o ./yolov4-fp16.trt
 
 # convert ONNX to tensorrt engine with float32 weights
+# needs path to calibration dataset (representative images from dataset), marked below as './calib_images' 
 python onnx_to_tensorrt.py -v -c 80 -m ./yolov4.onnx -i ./calib_images -q int8 -o ./yolov4-int8.trt
 ```

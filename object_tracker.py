@@ -14,7 +14,7 @@ from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
 # YOLO detectors
-from detectors import OpenCVYOLO, TfYOLO, TfliteYOLO, TrtYOLO
+from detectors import *
 
 
 @click.command()

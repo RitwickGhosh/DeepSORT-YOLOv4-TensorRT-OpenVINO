@@ -434,8 +434,7 @@ trt_yolo/calib_images/*
 *.pb
 *.tflite
 *.weights
-*.cfg
-data/darknet/*
+data/darknet/*.weights
 data/tf/*
 data/tflite/*
 data/trt/*
