@@ -113,5 +113,3 @@ Many thanks for great job for:
 - [nwojke](https://github.com/nwojke): [deep_sort](https://github.com/nwojke/deep_sort), MIT License
 
 - [jkjung-avt](https://github.com/jkjung-avt): [tensorrt_demos](https://github.com/jkjung-avt/tensorrt_demos), MIT License
-
-- [hunglc007](https://github.com/hunglc007): [tensorflow-yolov4-tflite](https://github.com/hunglc007/tensorflow-yolov4-tflite), MIT License
