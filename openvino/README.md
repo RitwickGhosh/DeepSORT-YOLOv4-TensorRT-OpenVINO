@@ -20,4 +20,4 @@ python mo.py --input_model ./yolov4.onnx --model_name yolov4_fp32 --data_type FP
 python mo.py --input_model ./yolov4.onnx --model_name yolov4_fp16 --data_type FP16 --batch 1
 ```
 
-![OpenVINO](https://miro.medium.com/max/761/1*75Tym19aH6nKF-c9SZlxNQ.png)
+<p align="center"><img src="https://miro.medium.com/max/761/1*75Tym19aH6nKF-c9SZlxNQ.png"\></p>

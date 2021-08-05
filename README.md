@@ -46,22 +46,12 @@ Options:
 
 [YOLOv4](https://arxiv.org/abs/2004.10934) object detector was trained with the use of [Darknet](https://github.com/AlexeyAB/darknet) framework and on the [VisDrone datasets](http://aiskyeye.com/). Images were captured from UAV's perspective. Each independent object belongs to one of the 11 categories. Small and occluded parts of images where were many instances were marked as an ignored region (12 category). The YOLOv4 configuration file is in [data/darknet/yolov4_visdrone.cfg](data/darknet/yolov4_visdrone.cfg), classes file is in [data/classes/visdrone.names](data/classes/visdrone.names) and calculated sizes of anchor boxes are in [data/anchors/visdrone_anchors.txt](data/anchors/visdrone_anchors.txt).
 
-The optimization and quantization process was performed with use of [TensorRT](https://developer.nvidia.com/tensorrt) for [NVIDIA Jetson Xavier NX](https://developer.nvidia.com/embedded/jetson-xavier-nx) and [OpenVINO](https://docs.openvinotoolkit.org/latest/index.html) for [Intel Neural Compute Stick 2](https://software.intel.com/content/www/us/en/develop/hardware/neural-compute-stick.html). Steps for NVIDIA TensorRT are described in [trt_yolo/README.md](trt_yolo/README.md) file. Wheras, for OpenVINO was used ONNX file generated with instruction from [trt_yolo/README.md](trt_yolo/README.md) and then with use of OpenVINO [Model Optimizer](https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Convert_Model_From_ONNX.html) package and commands:
+The optimization and quantization process was performed with use of [TensorRT](https://developer.nvidia.com/tensorrt) for [NVIDIA Jetson Xavier NX](https://developer.nvidia.com/embedded/jetson-xavier-nx) and [OpenVINO](https://docs.openvinotoolkit.org/latest/index.html) for [Intel Neural Compute Stick 2](https://software.intel.com/content/www/us/en/develop/hardware/neural-compute-stick.html). 
 
-```bash
-# for FP32 format
-python3 mo.py --input_model <PATH TO ONNX MODEL> --model_name <OUTPUT IR MODEL NAME> --data_type FP32 --batch 1
-
-# for FP16 format
-python3 mo.py --input_model <PATH TO ONNX MODEL> --model_name <OUTPUT IR MODEL NAME> --data_type FP16 --batch 1
-```
-
-Conversion to TensorFlow Lite was done with use of ONNX model and [onnx-tensorflow](https://github.com/onnx/onnx-tensorflow) package by command line interface:
-
-```bash
-onnx-tf convert -i /path/to/input.onnx -o /path/to/output
-```
-
+Conversion steps are described in following files:
+- [**TensorRT**](tensorrt/README.md)
+- [**OpenVINO**](openvino/README.md)
+- [**TensorFlow Lite**](tflite/README.md)
 
 ## Performance tests
 
@@ -96,6 +86,40 @@ The full TensorFlow library was utilized for Raspberry Pi 4B. The build instruct
 |  TensorFlow Lite FP32 |           19.9633          |           14.7623          |           0.2095          |
 |  TensorFlow Lite FP16 |           19.4803          |           14.4580          |           0.2058          |
 | OpenCV DNN TARGET CPU |           37.1923          |           31.1872          |           0.2491          |
+
+## Power consumption tests
+
+During the performance evaluation, the energy efficiency of benchmarked edge devices was checked. The power consumption of Intel Neural Compute Stick 2 and Raspberry Pi 4B was measured with the use of a USB multifunction tester as is shown in the figure below. 
+
+**Intel Neural Compute Stick 2 with Raspberry Pi 4B**
+
+<p align="center"><img src="data/helpers/ncs_inference.jpg"\></p>
+
+|          State          | Average Voltage [V] | Average Current [A] | Average Power [W] |
+|:-----------------------:|:-------------------:|:-------------------:|:-----------------:|
+|           idle          |        5.097        |        0.121        |       0.616       |
+| model loaded to plugins |        5.042        |        0.232        |       1.169       |
+|        inference        |        5.021        |        0.405        |       2.033       |
+
+**Raspberry Pi 4B**
+
+<p align="center"><img src="data/helpers/rpi_ncs_inference.jpg"\></p>
+
+|          State          | Average Voltage [V] | Average Current [A] | Average Power [W] |
+|:-----------------------:|:-------------------:|:-------------------:|:-----------------:|
+|           idle          |        5.074        |        0.645        |       3.272       |
+| model loaded to plugins |        5.060        |        0.978        |       5.102       |
+|        inference        |        5.061        |        1.137        |       5.748       |
+
+**NVIDIA Jetson Xavier NX**
+
+Jetson Xavier NX energy usage was inspected with the use of the [jetson-stats](https://github.com/rbonghi/jetson_stats) package which is intended for monitoring and control NVIDIA Jetson devices. The results of the performed tests are presented in the table below. 
+
+|               State               | Average Voltage [V] | Average Current [A] | Average Power [W] |
+|:---------------------------------:|:-------------------:|:-------------------:|:-----------------:|
+|                idle               |          19         |        0.1371       |       2.605       |
+| Jetson clocks,  fan max frequency |          19         |        0.1839       |       3.495       |
+|             inference             |          19         |        0.3770       |       7.163       |
 
 ## Use cases
 

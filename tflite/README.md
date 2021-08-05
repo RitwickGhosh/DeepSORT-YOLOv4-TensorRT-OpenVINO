@@ -24,3 +24,5 @@ python tf2tflite.py -m ./yolov4/ -q fp32 -o ./yolov4_fp32.tflite
 # convert ONNX to tflite with float16 weights
 python tf2tflite.py -m ./yolov4/ -q fp16 -o ./yolov4_fp16.tflite
 ```
+
+<p align="center"><img src="https://www.tensorflow.org/lite/images/convert/convert.png"\></p>

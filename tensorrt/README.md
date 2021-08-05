@@ -24,4 +24,4 @@ python onnx_to_tensorrt.py -v -c 80 -m ./yolov4.onnx -q fp16 -o ./yolov4-fp16.tr
 python onnx_to_tensorrt.py -v -c 80 -m ./yolov4.onnx -i ./calib_images -q int8 -o ./yolov4-int8.trt
 ```
 
-![TensorRT](https://developer.nvidia.com/sites/default/files/akamai/tensorrt/nvidia-tensorrt-infographic.svg)
+<p align="center"><img src="https://developer.nvidia.com/sites/default/files/akamai/tensorrt/nvidia-tensorrt-infographic.svg"\></p>
