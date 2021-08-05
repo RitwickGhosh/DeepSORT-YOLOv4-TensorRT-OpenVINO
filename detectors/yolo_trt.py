@@ -17,7 +17,7 @@ import pycuda.driver as cuda
 
 
 try:
-    ctypes.cdll.LoadLibrary('./trt_yolo/yolo_layers_plugins/libyolo_layer.so')
+    ctypes.cdll.LoadLibrary('./tensorrt/yolo_layers_plugins/libyolo_layer.so')
 except OSError as e:
     raise SystemExit('ERROR: failed to load ./plugins/libyolo_layer.so.  '
                      'Did you forget to do a "make" in the "./plugins/" '
