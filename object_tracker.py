@@ -45,7 +45,7 @@ def main(framework, model_path, yolo_names, size, tiny, model_type,
     nms_max_overlap = 1.0
     
     # initialize deep sort
-    model_filename = 'data/deep_sort_model/mars-small128.pb'
+    model_filename = './data/deep_sort_model/mars-small128.pb'
     encoder = gdet.create_box_encoder(model_filename, batch_size=1)
     # calculate cosine distance metric
     metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
