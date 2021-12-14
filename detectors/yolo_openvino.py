@@ -26,8 +26,6 @@ class YoloParams:
         self.coords = 4 if 'coords' not in param else int(param['coords'])
         self.classes = 80 if 'classes' not in param else int(param['classes'])
         self.side = side
-        """self.anchors = [12.0,16.0, 19.0,36.0, 40.0,28.0, 36.0,75.0, 76.0,55.0, 72.0,146.0, 142.0,110.0, 192.0,243.0, 
-                            459.0,401.0]"""
         self.anchors = [10.0, 13.0, 16.0, 30.0, 33.0, 23.0, 30.0, 61.0, 62.0, 45.0, 59.0, 119.0, 116.0, 90.0, 156.0,
                         198.0, 373.0, 326.0] if 'anchors' not in param else param['anchors']
 
@@ -141,9 +139,7 @@ class OpenvinoYOLO(object):
 
     def _parse_yolo_region(self, predictions, resized_image_shape, original_im_shape, params, threshold, is_proportional):
         # ------------------------------------------ Validating output parameters ------------------------------------------
-        print(predictions.shape)
-        #predictions= predictions[2]
-        _,_,out_blob_h, out_blob_w = predictions.shape
+        _, _, out_blob_h, out_blob_w = predictions.shape
         assert out_blob_w == out_blob_h, "Invalid size of output blob. It sould be in NCHW layout and height should " \
                                         "be equal to width. Current height = {}, current width = {}" \
                                         "".format(out_blob_h, out_blob_w)
