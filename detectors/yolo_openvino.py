@@ -244,11 +244,12 @@ class OpenvinoYOLO(object):
             scores.append(obj['confidence'])
 
         # format bounding boxes from xmin, ymin, xmax, ymax ---> xmin, ymin, width, height
-        bboxes = np.array(bboxes)
-        print(bboxes)
-        if bboxes != []:
-            xy_min = np.hstack((np.zeros((bboxes.shape[0], 2)), bboxes[:,:2]))
-            bboxes = np.subtract(bboxes, xy_min)
+        oxes = np.array(bboxes)
+        width = oxes[2] - oxes[0]
+        height = oxes[3] - oxes[1]
+        bboxes = np.hstack((oxes[0], oxes[1], width, height))
+        #xy_min = np.hstack((np.zeros((bboxes.shape[0], 2)), bboxes[:,:2]))
+        #bboxes = np.subtract(bboxes, xy_min)
 
         return bboxes, np.array(scores), np.array(classes), np.array(len(classes))
 
