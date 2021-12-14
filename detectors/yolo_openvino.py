@@ -141,7 +141,8 @@ class OpenvinoYOLO(object):
 
     def _parse_yolo_region(self, predictions, resized_image_shape, original_im_shape, params, threshold, is_proportional):
         # ------------------------------------------ Validating output parameters ------------------------------------------
-        _, _, out_blob_h, out_blob_w = predictions.shape
+        a, out_blob_h, out_blob_w = predictions.shape
+        print(a, out_blob_h, out_blob_w)
         assert out_blob_w == out_blob_h, "Invalid size of output blob. It sould be in NCHW layout and height should " \
                                         "be equal to width. Current height = {}, current width = {}" \
                                         "".format(out_blob_h, out_blob_w)
