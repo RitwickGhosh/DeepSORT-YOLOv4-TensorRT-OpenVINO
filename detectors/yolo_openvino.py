@@ -244,8 +244,8 @@ class OpenvinoYOLO(object):
 
         # format bounding boxes from xmin, ymin, xmax, ymax ---> xmin, ymin, width, height
         bboxes = np.array(bboxes)
-        xy_min = np.hstack([np.zeros((bboxes.shape[0], 2)), bboxes[:,:2]])
-        bboxes = np.subtract(bboxes, xy_min)
+        #xy_min = np.hstack([np.zeros((bboxes.shape[0], 2)), bboxes[:,:2]])
+        #bboxes = np.subtract(bboxes, xy_min)
 
         return bboxes, np.array(scores), np.array(classes), np.array(len(classes))
 
