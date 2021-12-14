@@ -139,6 +139,7 @@ class OpenvinoYOLO(object):
 
     def _parse_yolo_region(self, predictions, resized_image_shape, original_im_shape, params, threshold, is_proportional):
         # ------------------------------------------ Validating output parameters ------------------------------------------
+        print(predictions.shape)
         _, _, out_blob_h, out_blob_w = predictions.shape
         assert out_blob_w == out_blob_h, "Invalid size of output blob. It sould be in NCHW layout and height should " \
                                         "be equal to width. Current height = {}, current width = {}" \
@@ -245,8 +246,9 @@ class OpenvinoYOLO(object):
         # format bounding boxes from xmin, ymin, xmax, ymax ---> xmin, ymin, width, height
         bboxes = np.array(bboxes)
         print(bboxes)
-        xy_min = np.hstack((np.zeros((bboxes.shape[0], 2)), bboxes[:,:2]))
-        bboxes = np.subtract(bboxes, xy_min)
+        if bboxes != []:
+            xy_min = np.hstack((np.zeros((bboxes.shape[0], 2)), bboxes[:,:2]))
+            bboxes = np.subtract(bboxes, xy_min)
 
         return bboxes, np.array(scores), np.array(classes), np.array(len(classes))
 
